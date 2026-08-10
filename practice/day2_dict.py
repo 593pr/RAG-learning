@@ -20,23 +20,19 @@ import sys
 import json
 sys.stdout.reconfigure(encoding='utf-8')
 
-
 try:
     with open("contacts.json","r",encoding="utf-8") as f:
         contacts = json.load(f)
 except FileNotFoundError:
-    contacts = {}
+    contact ={}
 
 def save():
     with open("contacts.json","w",encoding="utf-8") as f:
         json.dump(contacts,f,ensure_ascii=False)
 
-
-
 def add_contact(name, phone, email):
     contacts[name] = {"phone": phone,"email": email}
     save()
-
 
 def search(name):
     if name in contacts:
