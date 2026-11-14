@@ -19,7 +19,7 @@ def build_prompt(text: str) -> str:
 1.把英文翻译成流利的中文
 2.将中文进行提炼总结出三个要点
 
-英文内容：{}
+英文内容：{text}
 
 请按下面格式输出：
 翻译：
@@ -30,7 +30,6 @@ def build_prompt(text: str) -> str:
 2. 要点2
 3. 要点3
 """
-    pass
 
 
 def mock_openai_response(text: str) -> dict:
@@ -43,7 +42,6 @@ def mock_openai_response(text: str) -> dict:
             "这是第三个要点",
         ],
     }
-    pass
 
 def openai_calling(text):
     
@@ -67,7 +65,6 @@ def parse_result(response: dict) -> tuple[str, list[str]]:
     bullet_points = response["summary"]
 
     return translation, bullet_points
-    pass
 
 
 def print_result(translation: str, bullet_points: list[str]) -> None:
@@ -97,16 +94,16 @@ conversation = []
 
 conversation.append(
     {
-        "role" = "user",
-        "content" = "xxxxxxx",
+        "role" : "user",
+        "content" : "xxxxxxx",
 
     }
 )
 
 conversation.append(
     {
-        "role" = "assistant"
-        "content" = "xxxxxxx"
+        "role" : "assistant",
+        "content" : "xxxxxxx",
     }
 )
 
