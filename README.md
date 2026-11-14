@@ -1,9 +1,13 @@
-# 从零手写 RAG：召回 → 混合 → 重排
+# 从零手写 RAG：检索链路 + 工程化落地
 
-> 不用框架，实现完整的 RAG 检索链路：切块 → 语义 / BM25 混合召回 → cross-encoder 精排。
+> 不用框架，实现完整 RAG 链路：切块 → 语义 / BM25 混合召回 → cross-encoder 精排，
+> 再工程化成可部署的服务：错误处理 / 重试 / 缓存 / 评测 → FastAPI（SSE）→ Docker → Postgres。
 > 11 题测试集上，recall@3 从 2/11 提升到 11/11。
 
-全程用 Python 实现，目标是理解 RAG 链路的结构和基础原理，而不是调用现成框架。核心是 `RAG1`–`RAG9` 九个递进脚本，每个环节都有可复现的对比实验。
+全程用 Python 实现，目标是理解 RAG 的结构和原理，而不是调用现成框架。
+
+- **检索实验**（W1）：`RAG1`–`RAG9` 九个递进脚本，每个环节都有可复现的对比实验。
+- **工程化**（W2）：`rag_engine/` 包 + `Dockerfile` / `docker-compose.yml`，一条 `docker compose up` 起服务，会话写入 Postgres。
 
 ## 核心结果
 
@@ -15,6 +19,8 @@
 | 一阶段召回天花板（top-20） | recall@20 = 11/11 |
 | rerank（bge-reranker-base，top-20 → 精排） | recall@1 8/11 → 10/11；recall@3 9/11 → 11/11 |
 | 端到端答案正确率（k=3 / k=5） | 9/11 / 11/11 |
+| HTTP 服务（容器内） | `/ask` 1.83s；SSE 首帧 3.5ms、总 1.06s |
+| 会话落库 | 一轮问答写 2 行约 6ms；`restart` 后数据不丢 |
 
 > 测试集 11 题，答案关键词均已在原文验证。语料：hello-algo 1.3.0（361 页 / 216,183 字 / 1854 chunks，chunk_size=200，overlap=50）。
 
