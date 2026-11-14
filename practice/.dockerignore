@@ -1,0 +1,12 @@
+# 1.2GB 的 reranker 和 16MB 的语料都不该发给 Docker daemon
+models/
+data/
+cache/
+__pycache__/
+*.pyc
+.venv/
+venv/
+.env
+*.md
+RAG*.py
+day2*_demo.py

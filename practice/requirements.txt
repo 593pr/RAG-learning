@@ -1,0 +1,12 @@
+# 只列服务真正需要的直接依赖（torch 在 Dockerfile 里单独装 CPU 版）
+fastapi==0.124.4
+uvicorn==0.33.0
+pydantic==2.13.4
+sentence-transformers==6.1.0
+pypdf==6.13.2
+rank-bm25==0.2.2
+jieba==0.42.1
+openai==2.36.0
+numpy==2.4.6
+psycopg[binary]==3.2.3
+psycopg-pool==3.2.3

@@ -1,0 +1,48 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      # 数据落在命名卷里，不在容器可写层 —— 容器删了数据还在
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      # pg_isready 通了才算「数据库真的能接连接」，容器 running 不代表能连
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
+
+  rag:
+    build: .
+    image: rag-engine:dev
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env
+    environment:
+      HF_ENDPOINT: https://hf-mirror.com
+      HF_HOME: /models/hf
+      # db 是服务名，compose 的内部 DNS 会解析成容器 IP；
+      # 这是容器之间通信，和宿主机端口无关，所以 db 不需要 ports
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@db:5432/${POSTGRES_DB}
+    volumes:
+      # 模型缓存：不挂的话每次重建容器都要重新下载 ~100MB
+      - hf-cache:/models/hf
+      # embedding 缓存：复用宿主机算好的 1854 个 chunk 向量
+      - ./cache/embed:/app/cache/embed
+      # 语料 PDF 不进镜像，只读挂载
+      - ./data:/app/data:ro
+    depends_on:
+      db:
+        # Postgres 首次启动要初始化数据目录，5~10 秒。
+        # 没有这一行，rag 会先起来、连库失败、崩掉再重启
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  hf-cache:
+  pgdata:

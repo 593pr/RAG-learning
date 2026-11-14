@@ -14,6 +14,7 @@
 | 混合检索（BM25 + 语义，分数融合） | recall@5 = 11/11 |
 | 一阶段召回天花板（top-20） | recall@20 = 11/11 |
 | rerank（bge-reranker-base，top-20 → 精排） | recall@1 8/11 → 10/11；recall@3 9/11 → 11/11 |
+| 端到端答案正确率（k=3 / k=5） | 9/11 / 11/11 |
 
 > 测试集 11 题，答案关键词均已在原文验证。语料：hello-algo 1.3.0（361 页 / 216,183 字 / 1854 chunks，chunk_size=200，overlap=50）。
 
@@ -101,6 +102,53 @@ set DEEPSEEK_API_KEY=your_key_here
 export DEEPSEEK_API_KEY=your_key_here
 ```
 
+端到端评测（检索 + 生成，11 题固定测试集）：
+
+```bash
+cd practice
+python -m rag_engine.day23_eval_demo
+```
+
+HTTP 服务（`POST /ask` + SSE 流式）：
+
+```bash
+cd practice
+python -m uvicorn rag_engine.server:app --port 8000
+
+# 另开终端验收（计时 + 流式打点）
+python -m rag_engine.day24_client
+```
+
+浏览器打开 `http://127.0.0.1:8000/docs` 可直接调接口。索引在 `lifespan` 里只加载一次，启动约 6s；实测非流式 2.41s，流式首字 1.37s。
+
+`POST /ask` 可选传 `session_id`（不传则新建会话），返回 `session_id` / `message_id` / `latency_ms`；`GET /history/{session_id}` 回查该会话的消息。会话记录存在 Postgres 里。
+
+### Docker
+
+```bash
+cd practice
+cp .env.example .env        # 填入 DEEPSEEK_API_KEY 和 POSTGRES_* 三项
+docker compose up -d --build
+
+docker compose ps           # db 先 healthy，rag 约 40s 后 healthy
+curl http://127.0.0.1:8000/healthz
+curl http://127.0.0.1:8000/history/1
+docker compose logs -f rag
+docker compose down         # 保留命名卷；加 -v 会连模型缓存和数据库一起删
+```
+
+前提：`data/hello-algo.pdf` 存在（只读挂载）、Docker Desktop 运行中、`.env` 里有 `DEEPSEEK_API_KEY` 和 `POSTGRES_USER` / `POSTGRES_PASSWORD` / `POSTGRES_DB`。
+
+- 两个服务：`rag`（FastAPI + 检索）和 `db`（`postgres:16-alpine`）。`rag` 用 `depends_on: condition: service_healthy` 等 `db` 真的能接连接，而不是只等容器启动。
+- 数据分三处：模型缓存在命名卷 `hf-cache`，向量缓存在绑定挂载 `./cache/embed`，会话记录在命名卷 `pgdata`。`down` 都保留，`down -v` 全删。
+- 直连数据库：`docker compose exec db psql -U rag -d rag`（`\dt` 看表，`\d messages` 看结构和索引）。
+- `db` 不暴露端口，只在 compose 内部网络用服务名 `db` 访问；`DATABASE_URL` 由 compose 从 `.env` 拼出。连不上时先看 `docker compose logs rag` 里的 `psycopg.OperationalError`。
+- 镜像约 2GB：CPU 版 torch + transformers。容器不需要 GPU。
+- 首次启动下载 embedding 模型（约 100MB，走 `HF_ENDPOINT`）；之后模型在命名卷 `hf-cache`、向量缓存在 `./cache/embed`，重建容器不重算。
+- 国内网络：Dockerfile 里 apt / pip / torch 均指向腾讯云镜像；换网络时改回官方源。基础镜像拉取可在 `~/.docker/daemon.json` 配 `registry-mirrors`。
+- 容器内监听 `0.0.0.0:8000`，端口映射写在 compose 的 `ports` 里。实测容器内非流式 1.83s，SSE 首帧 3.5ms。
+- 热启动约 24–27s，其中大部分是在向 Hugging Face 查模型更新；模型已在卷里时可设 `HF_HUB_OFFLINE=1` 跳过。
+
 ## 文件导航
 
 | 文件 | 内容 |
@@ -114,6 +162,10 @@ export DEEPSEEK_API_KEY=your_key_here
 | `RAG7.topk.py` | 11 题测试集 + 检索评估 |
 | `RAG8_hybrid.py` | 语义 + BM25 混合召回（RRF / 分数融合） |
 | `RAG9.rerank.py` | cross-encoder 二阶段重排 |
+| `rag_engine/` | W2 工程化包：错误体系 / 重试 / embedding 缓存 / pipeline / 端到端评测 |
+| `rag_engine/server.py` | FastAPI 服务：`/ask`、`/ask/stream`（SSE）、`/healthz`、`/history/{id}` |
+| `rag_engine/db.py` | Postgres 持久化：连接池、建表、写一轮问答、按会话读历史 |
+| `Dockerfile` / `docker-compose.yml` | 容器化：CPU 版 torch、模型/向量/数据三个卷、rag + db 两个服务 |
 | `experiment_results.md` | 全部实验记录与结论 |
 
 `practice/` 下另有早期 Python 练习脚本和 `weather-cli`，不是本项目的核心内容。
@@ -123,7 +175,7 @@ export DEEPSEEK_API_KEY=your_key_here
 - 测试集只有 11 题，1 题就是 9 个百分点，±1 不能当作提升。
 - rerank 的候选深度没有在独立验证集上调过。
 - 语料里有 18 个重复 chunk，没有做去重；RRF 分票的根因在这里。
-- 只评估了检索层（recall@k），没有评估 LLM 答案正确率。
+- 答案正确率用关键词命中做代理指标，未做 LLM judge；否定句 / 同义表述会误判。
 - PDF 提取会把部分汉字映射成康熙部首字符，评估前做了空白归一化。
 - `RAG4` / `RAG5` 使用的是另一份实验 PDF，路径需要自行修改。
 
