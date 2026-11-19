@@ -3,7 +3,9 @@ __pycache__/
 .env
 venv/
 .venv/
+.venv-fw/
 data/
 models/
 cache/
 *.log
+run.jsonl
