@@ -8,4 +8,4 @@ data/
 models/
 cache/
 *.log
-run.jsonl
+*.jsonl
